@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.graph_builder import build_dag, get_topological_order, graph_summary
 from app.parser import parse_sql_folder
+from app.visualizer import render_dag
 
 
 def main() -> None:
@@ -17,16 +18,23 @@ def main() -> None:
 
     dependency_map = parse_sql_folder(folder)
     graph = build_dag(dependency_map)
+    summary = graph_summary(graph)
 
     print("=== Dependency Map ===")
     print(json.dumps(dependency_map, indent=2))
 
     print("\n=== Graph Summary ===")
-    print(json.dumps(graph_summary(graph), indent=2))
+    print(json.dumps(summary, indent=2))
 
-    if graph_summary(graph)["is_dag"]:
+    if summary["is_dag"]:
         print("\n=== Topological Order ===")
         print(json.dumps(get_topological_order(graph), indent=2))
+
+        output_file = render_dag(graph, "output/pipeline_dag.png", engine="auto")
+        print("\n=== DAG Image Saved ===")
+        print(output_file)
+    else:
+        print("\nGraph contains cycles, so DAG visualization may not be reliable.")
 
 
 if __name__ == "__main__":
