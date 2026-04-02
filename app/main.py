@@ -9,6 +9,7 @@ from app.graph_builder import build_dag, get_topological_order, graph_summary
 from app.insights import explain_insights, summarize_insights
 from app.parser import parse_sql_folder
 from app.reporter import write_graph_json, write_markdown_report
+from app.sql_intelligence import analyze_sql_folder
 from app.visualizer import render_dag
 
 
@@ -20,11 +21,21 @@ def main() -> None:
     folder = Path(sys.argv[1])
 
     dependency_map = parse_sql_folder(folder)
+    semantic_map = analyze_sql_folder(folder)
+
     graph = build_dag(dependency_map)
     summary = graph_summary(graph)
 
     print("=== Dependency Map ===")
     print(json.dumps(dependency_map, indent=2))
+
+    print("\n=== SQL Intelligence ===")
+    print(
+        json.dumps(
+            {name: semantics.to_dict() for name, semantics in semantic_map.items()},
+            indent=2,
+        )
+    )
 
     print("\n=== Graph Summary ===")
     print(json.dumps(summary, indent=2))
@@ -38,7 +49,7 @@ def main() -> None:
         print(dag_image_file)
 
         print("\n=== Pipeline Explanation ===")
-        print(explain_full_pipeline(graph))
+        print(explain_full_pipeline(graph, semantic_map=semantic_map))
 
         print("\n=== Structured Insights ===")
         print(json.dumps(summarize_insights(graph), indent=2))
@@ -50,6 +61,7 @@ def main() -> None:
             graph,
             output_path="output/pipeline_report.md",
             dag_image_path=dag_image_file,
+            semantic_map=semantic_map,
         )
         print("\n=== Markdown Report Saved ===")
         print(report_file)
