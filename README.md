@@ -89,6 +89,26 @@ python -m app.main models
 ```
 
 ---
+## Sample DAG Output
+
+![Pipeline DAG](/docs/pipeline_dag.png)
+---
+
+## Sample Explanation
+
+Pipeline Summary
+This pipeline contains 5 nodes...
+
+Node Explanations
+
+stg_orders is an intermediate model...
+
+
+## Sample Insights
+Pipeline Insights
+
+The pipeline depth is 2 step(s)
+fct_sales has 2 upstream dependencies...
 
 ## Tech Stack
 

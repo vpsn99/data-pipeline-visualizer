@@ -4,7 +4,9 @@ import json
 import sys
 from pathlib import Path
 
+from app.explainer import explain_full_pipeline
 from app.graph_builder import build_dag, get_topological_order, graph_summary
+from app.insights import explain_insights, summarize_insights
 from app.parser import parse_sql_folder
 from app.visualizer import render_dag
 
@@ -33,6 +35,15 @@ def main() -> None:
         output_file = render_dag(graph, "output/pipeline_dag.png", engine="auto")
         print("\n=== DAG Image Saved ===")
         print(output_file)
+
+        print("\n=== Pipeline Explanation ===")
+        print(explain_full_pipeline(graph))
+
+        print("\n=== Structured Insights ===")
+        print(json.dumps(summarize_insights(graph), indent=2))
+
+        print("\n=== Insight Narration ===")
+        print(explain_insights(graph))
     else:
         print("\nGraph contains cycles, so DAG visualization may not be reliable.")
 
