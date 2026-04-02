@@ -8,6 +8,7 @@ from app.explainer import explain_full_pipeline
 from app.graph_builder import build_dag, get_topological_order, graph_summary
 from app.insights import explain_insights, summarize_insights
 from app.parser import parse_sql_folder
+from app.reporter import write_graph_json, write_markdown_report
 from app.visualizer import render_dag
 
 
@@ -32,9 +33,9 @@ def main() -> None:
         print("\n=== Topological Order ===")
         print(json.dumps(get_topological_order(graph), indent=2))
 
-        output_file = render_dag(graph, "output/pipeline_dag.png", engine="auto")
+        dag_image_file = render_dag(graph, "output/pipeline_dag.png", engine="auto")
         print("\n=== DAG Image Saved ===")
-        print(output_file)
+        print(dag_image_file)
 
         print("\n=== Pipeline Explanation ===")
         print(explain_full_pipeline(graph))
@@ -44,6 +45,21 @@ def main() -> None:
 
         print("\n=== Insight Narration ===")
         print(explain_insights(graph))
+
+        report_file = write_markdown_report(
+            graph,
+            output_path="output/pipeline_report.md",
+            dag_image_path=dag_image_file,
+        )
+        print("\n=== Markdown Report Saved ===")
+        print(report_file)
+
+        graph_json_file = write_graph_json(
+            graph,
+            output_path="output/graph_data.json",
+        )
+        print("\n=== Graph JSON Saved ===")
+        print(graph_json_file)
     else:
         print("\nGraph contains cycles, so DAG visualization may not be reliable.")
 
