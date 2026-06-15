@@ -3,15 +3,15 @@ digraph {
 	rankdir=LR
 	node [fontname=Helvetica fontsize=10 style=filled]
 	edge [fontname=Helvetica fontsize=9]
-	stg_customers [label=stg_customers fillcolor=lightblue shape=ellipse]
-	stg_orders [label=stg_orders fillcolor=lightblue shape=ellipse]
 	int_customer_orders [label=int_customer_orders fillcolor=lightblue shape=ellipse]
 	fct_sales [label=fct_sales fillcolor=lightgreen shape=box]
+	stg_customers [label=stg_customers fillcolor=lightblue shape=ellipse]
+	stg_orders [label=stg_orders fillcolor=lightblue shape=ellipse]
 	"raw.customers" [label="raw.customers" fillcolor=lightyellow shape=box]
 	"raw.orders" [label="raw.orders" fillcolor=lightyellow shape=box]
+	int_customer_orders -> fct_sales
 	stg_customers -> int_customer_orders
 	stg_orders -> int_customer_orders
-	int_customer_orders -> fct_sales
 	"raw.customers" -> stg_customers
 	"raw.orders" -> stg_orders
 }

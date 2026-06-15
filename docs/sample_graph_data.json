@@ -1,0 +1,74 @@
+{
+  "nodes": [
+    {
+      "id": "int_customer_orders",
+      "label": "int_customer_orders",
+      "node_type": "intermediate",
+      "defined_in_project": true,
+      "in_degree": 2,
+      "out_degree": 1
+    },
+    {
+      "id": "fct_sales",
+      "label": "fct_sales",
+      "node_type": "final",
+      "defined_in_project": true,
+      "in_degree": 1,
+      "out_degree": 0
+    },
+    {
+      "id": "stg_customers",
+      "label": "stg_customers",
+      "node_type": "intermediate",
+      "defined_in_project": true,
+      "in_degree": 1,
+      "out_degree": 1
+    },
+    {
+      "id": "stg_orders",
+      "label": "stg_orders",
+      "node_type": "intermediate",
+      "defined_in_project": true,
+      "in_degree": 1,
+      "out_degree": 1
+    },
+    {
+      "id": "raw.customers",
+      "label": "raw.customers",
+      "node_type": "source",
+      "defined_in_project": false,
+      "in_degree": 0,
+      "out_degree": 1
+    },
+    {
+      "id": "raw.orders",
+      "label": "raw.orders",
+      "node_type": "source",
+      "defined_in_project": false,
+      "in_degree": 0,
+      "out_degree": 1
+    }
+  ],
+  "edges": [
+    {
+      "source": "int_customer_orders",
+      "target": "fct_sales"
+    },
+    {
+      "source": "stg_customers",
+      "target": "int_customer_orders"
+    },
+    {
+      "source": "stg_orders",
+      "target": "int_customer_orders"
+    },
+    {
+      "source": "raw.customers",
+      "target": "stg_customers"
+    },
+    {
+      "source": "raw.orders",
+      "target": "stg_orders"
+    }
+  ]
+}

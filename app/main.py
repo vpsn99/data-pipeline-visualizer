@@ -7,6 +7,7 @@ from pathlib import Path
 from app.explainer import explain_full_pipeline
 from app.graph_builder import build_dag, get_topological_order, graph_summary
 from app.insights import explain_insights, summarize_insights
+from app.model_catalog import write_model_catalog
 from app.parser import parse_sql_folder
 from app.reporter import write_graph_json, write_markdown_report
 from app.sql_intelligence import analyze_sql_folder
@@ -147,6 +148,15 @@ def main() -> None:
         )
         print("\n=== Graph JSON Saved ===")
         print(graph_json_file)
+
+        model_catalog_file = write_model_catalog(
+            graph,
+            semantic_map,
+            output_path="output/model_catalog.json",
+        )
+        print("\n=== Model Catalog Saved ===")
+        print(model_catalog_file)
+
     else:
         print("\nGraph contains cycles, so DAG visualization may not be reliable.")
 
