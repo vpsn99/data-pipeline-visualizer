@@ -3,6 +3,7 @@ from app.explainer import (
     explain_lineage_paths,
     explain_node,
     explain_pipeline_summary,
+    explain_transformation_intent,
 )
 from app.graph_builder import build_dag
 from app.sql_intelligence import analyze_sql
@@ -121,3 +122,20 @@ def test_explain_node_with_phase3_semantics():
     assert "aliases" in text.lower()
     assert "joins on" in text.lower()
     assert "aggregate" in text.lower()
+
+
+def test_explain_transformation_intent():
+    sql = """
+    select
+        customer_name,
+        sum(amount) as total_amount
+    from orders
+    group by customer_name
+    """
+
+    semantics = analyze_sql("test_model", sql)
+
+    text = explain_transformation_intent(semantics)
+
+    assert text is not None
+    assert "aggregates" in text.lower()

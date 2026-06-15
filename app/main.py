@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 
 from app.explainer import explain_full_pipeline
@@ -13,20 +13,74 @@ from app.sql_intelligence import analyze_sql_folder
 from app.visualizer import render_dag
 
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: python -m app.main <sql_folder>")
-        sys.exit(1)
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Visualize and analyze SQL/dbt-style data pipelines."
+    )
+    parser.add_argument(
+        "sql_folder",
+        help="Path to folder containing SQL model files.",
+    )
+    parser.add_argument(
+        "--parser",
+        choices=["heuristic", "sqlglot", "auto"],
+        default="auto",
+        help="SQL parsing backend to use.",
+    )
+    parser.add_argument(
+        "--dialect",
+        default=None,
+        help="Optional SQL dialect for sqlglot, e.g. snowflake, spark, duckdb.",
+    )
+    parser.add_argument(
+        "--no-visual",
+        action="store_true",
+        help="Skip DAG image generation.",
+    )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Generate report and JSON output without printing long explanations.",
+    )
+    return parser
 
-    folder = Path(sys.argv[1])
+
+def resolve_sqlglot_usage(parser_mode: str) -> bool:
+    """
+    Decide whether sqlglot should be used.
+    For now:
+    - heuristic -> False
+    - sqlglot -> True
+    - auto -> True
+    """
+    return parser_mode in {"sqlglot", "auto"}
+
+
+def main() -> None:
+    arg_parser = build_arg_parser()
+    args = arg_parser.parse_args()
+
+    folder = Path(args.sql_folder)
+    use_sqlglot = resolve_sqlglot_usage(args.parser)
 
     dependency_map = parse_sql_folder(folder)
-    semantic_map = analyze_sql_folder(folder)
+    semantic_map = analyze_sql_folder(
+        folder,
+        use_sqlglot=use_sqlglot,
+        dialect=args.dialect,
+    )
 
     graph = build_dag(dependency_map)
     summary = graph_summary(graph)
 
-    print("=== Dependency Map ===")
+    print("=== SQL Parser Mode ===")
+    if use_sqlglot:
+        dialect_text = args.dialect if args.dialect else "default"
+        print(f"{args.parser} (sqlglot enabled, dialect={dialect_text})")
+    else:
+        print("heuristic only")
+
+    print("\n=== Dependency Map ===")
     print(json.dumps(dependency_map, indent=2))
 
     print("\n=== SQL Intelligence ===")
@@ -37,25 +91,46 @@ def main() -> None:
         )
     )
 
+    print("\n=== Parser Diagnostics ===")
+
+    diagnostics = {
+        name: {
+            "parser_used": sem.parser_used,
+            "parse_status": sem.parse_status,
+            "parse_error": sem.parse_error,
+        }
+        for name, sem in semantic_map.items()
+    }
+
+    print(json.dumps(diagnostics, indent=2))
+
     print("\n=== Graph Summary ===")
     print(json.dumps(summary, indent=2))
+
+    dag_image_file: Path | None = None
 
     if summary["is_dag"]:
         print("\n=== Topological Order ===")
         print(json.dumps(get_topological_order(graph), indent=2))
 
-        dag_image_file = render_dag(graph, "output/pipeline_dag.png", engine="auto")
-        print("\n=== DAG Image Saved ===")
-        print(dag_image_file)
+        if not args.no_visual:
+            dag_image_file = render_dag(
+                graph,
+                "output/pipeline_dag.png",
+                engine="auto",
+            )
+            print("\n=== DAG Image Saved ===")
+            print(dag_image_file)
 
-        print("\n=== Pipeline Explanation ===")
-        print(explain_full_pipeline(graph, semantic_map=semantic_map))
+        if not args.report_only:
+            print("\n=== Pipeline Explanation ===")
+            print(explain_full_pipeline(graph, semantic_map=semantic_map))
 
-        print("\n=== Structured Insights ===")
-        print(json.dumps(summarize_insights(graph), indent=2))
+            print("\n=== Structured Insights ===")
+            print(json.dumps(summarize_insights(graph), indent=2))
 
-        print("\n=== Insight Narration ===")
-        print(explain_insights(graph))
+            print("\n=== Insight Narration ===")
+            print(explain_insights(graph))
 
         report_file = write_markdown_report(
             graph,

@@ -38,6 +38,10 @@ def get_downstream_nodes(graph: nx.DiGraph, node: str) -> list[str]:
     return sorted(graph.successors(node))
 
 
+def clean_name(name: str) -> str:
+    return name.split(".")[-1]
+
+
 def _article(word: str | None) -> str:
     if not word:
         return "a"
@@ -181,8 +185,30 @@ def explain_node(
         )
 
     if semantic_map and node in semantic_map:
-        semantic_text = explain_sql_semantics(semantic_map[node])
-        return f"{base_text} It {semantic_text}."
+        semantics = semantic_map[node]
+        layer = getattr(semantics, "model_layer", "other")
+
+        if layer == "fact":
+            base_text = f"{node} is a fact model built from {format_node_list(upstream)}."
+
+        elif layer == "dimension":
+            base_text = f"{node} is a dimension model built from {format_node_list(upstream)}."
+
+        extras: list[str] = []
+
+        if hasattr(semantics, "complexity_level"):
+            extras.append(f"It is a {semantics.complexity_level} complexity model.")
+
+        intent_text = explain_transformation_intent(semantics)
+        if intent_text:
+            extras.append(f"It {intent_text}.")
+
+        semantic_text = explain_sql_semantics(semantics)
+        if semantic_text:
+            extras.append(f"It {semantic_text}.")
+
+        if extras:
+            return f"{base_text} {' '.join(extras)}"
 
     return base_text
 
@@ -273,3 +299,45 @@ def explain_full_pipeline(
             sections.append(f"- {explanation}")
 
     return "\n".join(sections)
+
+
+def explain_transformation_intent(semantics: SqlSemantics) -> str | None:
+    """
+    Convert SQL semantics into a higher-level transformation description.
+    """
+    if not semantics:
+        return None
+
+    # Aggregation model
+    if semantics.dominant_pattern == "aggregation":
+        if semantics.group_by_columns:
+            return f"aggregates data at the level of {', '.join(semantics.group_by_columns[:3])}"
+        return "aggregates data"
+
+    # Enrichment model
+    if semantics.dominant_pattern == "enrichment":
+        if semantics.source_tables:
+            return f"enriches data by combining {', '.join(semantics.source_tables[:2])}"
+        return "enriches data via joins"
+
+    # Filtering model
+    if semantics.dominant_pattern == "filtered":
+        return "filters input data based on conditions"
+
+    # Window model
+    if semantics.dominant_pattern == "windowed":
+        return "applies window functions for ranking or analytical calculations"
+
+    # Dedup model
+    if semantics.dominant_pattern == "deduplicated":
+        return "removes duplicate records"
+
+    # Union model
+    if semantics.dominant_pattern == "unioned":
+        return "combines multiple datasets"
+
+    # Staging model
+    if semantics.dominant_pattern == "staging":
+        return "prepares and standardizes source data"
+
+    return None

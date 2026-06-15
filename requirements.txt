@@ -3,3 +3,4 @@ networkx
 matplotlib
 graphviz
 ruff
+sqlglot

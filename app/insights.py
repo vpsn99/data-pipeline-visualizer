@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from app.sql_intelligence import SqlSemantics
 import networkx as nx
 
 
@@ -186,3 +188,42 @@ def explain_insights(graph: nx.DiGraph) -> str:
         lines.append(f"- Isolated nodes detected: {', '.join(isolated_nodes)}.")
 
     return "\n".join(lines)
+
+
+def compute_model_complexity(semantics: SqlSemantics) -> tuple[int, str]:
+    score = 0
+
+    # joins
+    score += semantics.join_count * 2
+
+    # dependencies
+    score += len(semantics.source_tables)
+
+    # aggregation
+    if semantics.has_group_by:
+        score += 2
+
+    # window functions
+    if semantics.has_window_functions:
+        score += 3
+
+    # subqueries
+    if semantics.has_subquery:
+        score += 2
+
+    # CTEs
+    score += semantics.cte_count
+
+    # union
+    if semantics.has_union:
+        score += 2
+
+    # classify
+    if score <= 2:
+        level = "low"
+    elif score <= 6:
+        level = "medium"
+    else:
+        level = "high"
+
+    return score, level

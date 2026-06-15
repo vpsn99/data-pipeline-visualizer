@@ -173,3 +173,33 @@ def test_extract_window_function_names():
     assert semantics.has_window_functions is True
     assert "row_number" in semantics.window_functions
     assert "lag" in semantics.window_functions
+
+
+def test_parser_fallback_behavior():
+    # deliberately malformed SQL
+    sql = "select from where broken syntax"
+
+    semantics = analyze_sql(
+        model_name="bad_model",
+        sql=sql,
+        use_sqlglot=True,
+    )
+
+    assert semantics.parser_used in {"heuristic", "sqlglot"}
+    assert semantics.parse_status in {"success", "fallback"}
+
+
+def test_complexity_scoring():
+    sql = """
+    select
+        c.customer_name,
+        sum(o.amount)
+    from orders o
+    join customers c on o.customer_id = c.customer_id
+    group by c.customer_name
+    """
+
+    semantics = analyze_sql("test_model", sql)
+
+    assert semantics.complexity_score > 0
+    assert semantics.complexity_level in {"low", "medium", "high"}

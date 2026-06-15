@@ -4,7 +4,14 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from app.insights import compute_model_complexity
+from app.model_classifier import classify_model_layer
 from app.parser import extract_dependencies, remove_sql_comments
+
+try:
+    from app.sqlglot_intelligence import analyze_with_sqlglot
+except ImportError:
+    analyze_with_sqlglot = None
 
 JOIN_TYPE_PATTERNS = {
     "inner": re.compile(r"\binner\s+join\b", re.IGNORECASE),
@@ -62,8 +69,40 @@ class SqlSemantics:
     inferred_patterns: list[str] = field(default_factory=list)
     dominant_pattern: str | None = None
 
+    parser_used: str = "heuristic"
+    parse_status: str = "success"
+    parse_error: str | None = None
+
+    model_layer: str = "other"
+    complexity_score: int = 0
+    complexity_level: str = "low"
+
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def preprocess_dbt_sql(sql: str) -> str:
+    """
+    Convert simple dbt/Jinja references into plain SQL identifiers
+    so sqlglot can parse them.
+    """
+    # {{ ref('model_name') }} -> model_name
+    sql = re.sub(
+        r"\{\{\s*ref\(\s*['\"]([^'\"]+)['\"]\s*\)\s*\}\}",
+        r"\1",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    # {{ source('raw', 'orders') }} -> raw.orders
+    sql = re.sub(
+        r"\{\{\s*source\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]+)['\"]\s*\)\s*\}\}",
+        r"\1.\2",
+        sql,
+        flags=re.IGNORECASE,
+    )
+
+    return sql
 
 
 def count_ctes(sql: str) -> int:
@@ -299,8 +338,14 @@ def infer_dominant_pattern(semantics: SqlSemantics) -> str | None:
     return None
 
 
-def analyze_sql(model_name: str, sql: str) -> SqlSemantics:
+def analyze_sql(
+    model_name: str,
+    sql: str,
+    use_sqlglot: bool = False,
+    dialect: str | None = None,
+) -> SqlSemantics:
     cleaned_sql = remove_sql_comments(sql)
+    sql_for_sqlglot = preprocess_dbt_sql(cleaned_sql)
 
     join_types = detect_join_types(cleaned_sql)
     dependencies = extract_dependencies(cleaned_sql)
@@ -350,17 +395,84 @@ def analyze_sql(model_name: str, sql: str) -> SqlSemantics:
 
     semantics.inferred_patterns = infer_patterns(semantics)
     semantics.dominant_pattern = infer_dominant_pattern(semantics)
+
+    score, level = compute_model_complexity(semantics)
+
+    semantics.complexity_score = score
+    semantics.complexity_level = level
+
+    semantics.model_layer = classify_model_layer(model_name)
+
+    if use_sqlglot and analyze_with_sqlglot is not None:
+        advanced = analyze_with_sqlglot(sql_for_sqlglot, dialect=dialect)
+        # advanced = analyze_with_sqlglot(cleaned_sql, dialect=dialect)
+
+        if advanced.parse_error:
+            # fallback to heuristic
+            semantics.parser_used = "heuristic"
+            semantics.parse_status = "fallback"
+            semantics.parse_error = advanced.parse_error
+        else:
+            semantics.parser_used = "sqlglot"
+            semantics.parse_status = "success"
+
+            if advanced.selected_columns:
+                semantics.selected_columns = advanced.selected_columns
+
+            if advanced.table_aliases:
+                semantics.table_aliases = advanced.table_aliases
+
+            if advanced.join_types:
+                semantics.join_types = advanced.join_types
+
+            if advanced.join_conditions:
+                semantics.join_conditions = advanced.join_conditions
+
+            if advanced.join_keys:
+                semantics.join_keys = advanced.join_keys
+
+            if advanced.group_by_columns:
+                semantics.group_by_columns = advanced.group_by_columns
+
+            if advanced.where_clause:
+                semantics.where_clause = advanced.where_clause
+                semantics.has_where = True
+
+            if advanced.having_clause:
+                semantics.having_clause = advanced.having_clause
+                semantics.has_having = True
+
+            if advanced.aggregate_functions:
+                semantics.aggregate_functions = advanced.aggregate_functions
+
+            if advanced.window_functions:
+                semantics.window_functions = advanced.window_functions
+                semantics.has_window_functions = True
+
     return semantics
 
 
-def analyze_sql_file(path: str | Path) -> SqlSemantics:
+def analyze_sql_file(
+    path: str | Path,
+    use_sqlglot: bool = False,
+    dialect: str | None = None,
+) -> SqlSemantics:
     file_path = Path(path)
     model_name = file_path.stem.lower()
     sql = file_path.read_text(encoding="utf-8")
-    return analyze_sql(model_name=model_name, sql=sql)
+    return analyze_sql(
+        model_name=model_name,
+        sql=sql,
+        use_sqlglot=use_sqlglot,
+        dialect=dialect,
+    )
 
 
-def analyze_sql_folder(folder_path: str | Path) -> dict[str, SqlSemantics]:
+def analyze_sql_folder(
+    folder_path: str | Path,
+    use_sqlglot: bool = False,
+    dialect: str | None = None,
+) -> dict[str, SqlSemantics]:
     folder = Path(folder_path)
     if not folder.exists():
         raise FileNotFoundError(f"Folder not found: {folder}")
@@ -370,7 +482,11 @@ def analyze_sql_folder(folder_path: str | Path) -> dict[str, SqlSemantics]:
 
     results: dict[str, SqlSemantics] = {}
     for sql_file in sorted(folder.glob("*.sql")):
-        semantics = analyze_sql_file(sql_file)
+        semantics = analyze_sql_file(
+            sql_file,
+            use_sqlglot=use_sqlglot,
+            dialect=dialect,
+        )
         results[semantics.model_name] = semantics
 
     return results

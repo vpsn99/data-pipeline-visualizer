@@ -9,6 +9,7 @@ import networkx as nx
 from app.explainer import explain_full_pipeline
 from app.graph_builder import export_graph_data, get_topological_order, graph_summary
 from app.insights import explain_insights, summarize_insights
+from app.model_classifier import summarize_layers
 
 if TYPE_CHECKING:
     from app.sql_intelligence import SqlSemantics
@@ -34,7 +35,6 @@ def generate_markdown_report(
     summary = graph_summary(graph)
     explanation = explain_full_pipeline(graph, semantic_map=semantic_map)
 
-    # Precompute summary strings (fixes line length + improves readability)
     sources_text = ", ".join(summary["sources"]) if summary["sources"] else "None"
     intermediates_text = ", ".join(summary["intermediates"]) if summary["intermediates"] else "None"
     finals_text = ", ".join(summary["finals"]) if summary["finals"] else "None"
@@ -79,15 +79,56 @@ def generate_markdown_report(
     lines.append("")
 
     if semantic_map:
-        semantic_json = json.dumps(
-            {name: semantics.to_dict() for name, semantics in semantic_map.items()},
-            indent=2,
-        )
-
-        lines.append("## SQL Intelligence")
+        lines.append("## Parser Diagnostics")
         lines.append("")
         lines.append("```json")
-        lines.append(semantic_json)
+
+        diagnostics = {
+            name: {
+                "parser_used": sem.parser_used,
+                "parse_status": sem.parse_status,
+                "parse_error": sem.parse_error,
+            }
+            for name, sem in semantic_map.items()
+        }
+
+        lines.append(json.dumps(diagnostics, indent=2))
+        lines.append("```")
+        lines.append("")
+
+        lines.append("## Model Layers")
+        lines.append("")
+        lines.append("```json")
+
+        layers = {name: sem.model_layer for name, sem in semantic_map.items()}
+
+        lines.append(json.dumps(layers, indent=2))
+        lines.append("```")
+        lines.append("")
+
+        lines.append("## Layer Summary")
+        lines.append("")
+        lines.append("```json")
+
+        layer_summary = summarize_layers(semantic_map)
+
+        lines.append(json.dumps(layer_summary, indent=2))
+        lines.append("```")
+        lines.append("")
+
+        lines.append("## Model Complexity")
+        lines.append("")
+        lines.append("```json")
+
+        complexity = {
+            name: {
+                "score": sem.complexity_score,
+                "level": sem.complexity_level,
+            }
+            for name, sem in semantic_map.items()
+        }
+
+        lines.append(json.dumps(complexity, indent=2))
         lines.append("```")
         lines.append("")
 
